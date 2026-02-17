@@ -2,18 +2,23 @@
 <html>
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Flappy AR</title>
+
 <style>
-body{margin:0;background:black;font-family:monospace}
-canvas{display:block;margin:auto}
+body{margin:0;background:black;font-family:monospace;overflow:hidden}
+canvas{display:block}
 #nameInput{
 position:absolute;
-top:35%;
+top:30%;
 left:50%;
 transform:translate(-50%,-50%);
-padding:10px;
+padding:12px;
 font-size:20px;
 display:none;
+border-radius:8px;
+border:none;
+outline:none;
 }
 </style>
 </head>
@@ -21,7 +26,7 @@ display:none;
 
 <input id="nameInput" placeholder="Tu nombre">
 
-<canvas id="game" width="400" height="650"></canvas>
+<canvas id="game"></canvas>
 
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase.js"></script>
 
@@ -32,10 +37,23 @@ databaseURL:"https://arflappy-default-rtdb.firebaseio.com"
 });
 const db=firebase.database();
 
-// CANVAS
+// CANVAS RESPONSIVE
 const canvas=document.getElementById("game");
 const ctx=canvas.getContext("2d");
+
+function resizeCanvas(){
+ canvas.width=window.innerWidth;
+ canvas.height=window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener("resize",resizeCanvas);
+
+// INPUT
 const input=document.getElementById("nameInput");
+
+// BASE RESOLUTION
+const BASE_W=400;
+const BASE_H=650;
 
 // ESTADO
 let state="start";
@@ -51,15 +69,15 @@ let bird={x:80,y:300,v:0,w:100,h:70};
 let clouds=[];
 for(let i=0;i<4;i++){
  clouds.push({
-  x:Math.random()*400,
-  y:Math.random()*600,
+  x:Math.random()*BASE_W,
+  y:Math.random()*BASE_H,
   speed:0.3+Math.random()*0.4
  });
 }
 
 // BOTONES
 let startBtn={x:100,y:420,w:200,h:60};
-let retryBtn={x:100,y:520,w:200,h:60};
+let retryBtn={x:100,y:540,w:200,h:60};
 
 // IMAGENES
 const bg=new Image(); bg.src="fondo.jpg";
@@ -76,9 +94,10 @@ setInterval(()=>{
 
 // CLICK
 canvas.addEventListener("click",e=>{
- let r=canvas.getBoundingClientRect();
- let mx=e.clientX-r.left;
- let my=e.clientY-r.top;
+
+ let rect=canvas.getBoundingClientRect();
+ let mx=(e.clientX-rect.left)*(BASE_W/canvas.width);
+ let my=(e.clientY-rect.top)*(BASE_H/canvas.height);
 
  if(state==="start"){
   if(mx>startBtn.x && mx<startBtn.x+startBtn.w && my>startBtn.y && my<startBtn.y+startBtn.h)
@@ -86,7 +105,10 @@ canvas.addEventListener("click",e=>{
   return;
  }
 
- if(state==="play"){ bird.v=-5.5; return; }
+ if(state==="play"){
+  bird.v=-4.8;
+  return;
+ }
 
  if(state==="gameover"){
   if(mx>retryBtn.x && mx<retryBtn.x+retryBtn.w && my>retryBtn.y && my<retryBtn.y+retryBtn.h)
@@ -129,20 +151,25 @@ input.addEventListener("keydown",e=>{
 // LOOP
 function loop(){
 
- ctx.clearRect(0,0,400,650);
- ctx.drawImage(bg,0,0,400,650);
+ ctx.clearRect(0,0,canvas.width,canvas.height);
+
+ // ESCALA
+ let scaleX=canvas.width/BASE_W;
+ let scaleY=canvas.height/BASE_H;
+ ctx.setTransform(scaleX,0,0,scaleY,0,0);
+
+ ctx.drawImage(bg,0,0,BASE_W,BASE_H);
 
  // NUBES
  clouds.forEach(c=>{
   c.x-=c.speed;
-  if(c.x<-120){c.x=450;c.y=Math.random()*600;}
+  if(c.x<-120){c.x=450;c.y=Math.random()*BASE_H;}
   ctx.drawImage(cloudImg,c.x,c.y,140,80);
  });
 
- // ---------- START ----------
+ // START
  if(state==="start"){
 
-  // TITULO CON FONDO
   ctx.font="42px monospace";
   let title="FLAPPY AR";
   let w=ctx.measureText(title).width;
@@ -160,7 +187,6 @@ function loop(){
   ctx.fillStyle="#00eaff";
   ctx.fillText(title,200-w/2,195);
 
-  // BOTON START
   ctx.fillStyle="#1e90ff";
   ctx.fillRect(startBtn.x,startBtn.y,startBtn.w,startBtn.h);
 
@@ -186,16 +212,17 @@ function loop(){
 
   ctx.fillStyle="#145a32";
   ctx.fillRect(p.x+5,0,70,p.top);
-  ctx.fillRect(p.x+5,p.top+p.gap,70,650);
+  ctx.fillRect(p.x+5,p.top+p.gap,70,BASE_H);
 
   ctx.fillStyle="#2ecc71";
   ctx.fillRect(p.x,0,70,p.top);
-  ctx.fillRect(p.x,p.top+p.gap,70,650);
+  ctx.fillRect(p.x,p.top+p.gap,70,BASE_H);
 
   ctx.fillStyle="rgba(255,255,255,0.25)";
   ctx.fillRect(p.x+8,0,12,p.top);
-  ctx.fillRect(p.x+8,p.top+p.gap,12,650);
+  ctx.fillRect(p.x+8,p.top+p.gap,12,BASE_H);
 
+  // COLISION
   if(state==="play" &&
    bird.x+bird.w>p.x &&
    bird.x<p.x+70 &&
@@ -206,41 +233,42 @@ function loop(){
    input.focus();
   }
 
+  // SCORE
   if(state==="play" && !p.passed && p.x<bird.x){
    p.passed=true;
    score++;
   }
  });
 
- if(bird.y>600 && state==="play"){
+ if(bird.y>BASE_H && state==="play"){
   state="gameover";
   input.style.display="block";
   input.focus();
  }
 
- // SCORE
+ // SCORE HUD
  ctx.fillStyle="white";
  ctx.font="40px monospace";
  ctx.fillText(score,180,60);
 
- // ---------- GAME OVER ----------
+ // GAME OVER
  if(state==="gameover"){
 
   ctx.fillStyle="rgba(0,0,0,0.7)";
-  ctx.fillRect(0,0,400,650);
+  ctx.fillRect(0,0,BASE_W,BASE_H);
 
   ctx.fillStyle="red";
-  ctx.font="38px monospace";
-  ctx.fillText("FIN DEL JUEGO",50,140);
+  ctx.font="36px monospace";
+  ctx.fillText("FIN DEL JUEGO",55,130);
 
   ctx.fillStyle="white";
   ctx.font="24px monospace";
-  ctx.fillText("Hiciste "+score+" puntos",80,190);
+  ctx.fillText("Hiciste "+score+" puntos",80,180);
 
   ctx.font="18px monospace";
   leaderboard.slice(0,5).forEach((p,i)=>{
    let medal=i==0?"🥇":i==1?"🥈":i==2?"🥉":"";
-   ctx.fillText(medal+" "+p.name+" - "+p.score,80,240+i*30);
+   ctx.fillText(medal+" "+p.name+" - "+p.score,70,230+i*30);
   });
 
   ctx.fillStyle="#1e90ff";
@@ -248,13 +276,12 @@ function loop(){
 
   ctx.fillStyle="white";
   ctx.font="22px monospace";
-  ctx.fillText("REINTENTAR",135,560);
+  ctx.fillText("REINTENTAR",135,580);
  }
 
  requestAnimationFrame(loop);
 }
 loop();
 </script>
-
 </body>
 </html>
