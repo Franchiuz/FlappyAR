@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Flappy AR</title>
+<style>
+body{margin:0;background:black;font-family:monospace}
+canvas{display:block;margin:auto}
+#nameInput{
+position:absolute;
+top:35%;
+left:50%;
+transform:translate(-50%,-50%);
+padding:10px;
+font-size:20px;
+display:none;
+}
+</style>
+</head>
+<body>
+
+<input id="nameInput" placeholder="Tu nombre">
+
+<canvas id="game" width="400" height="650"></canvas>
+
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase.js"></script>
+
+<script>
+// FIREBASE
+firebase.initializeApp({
+databaseURL:"https://arflappy-default-rtdb.firebaseio.com"
+});
+const db=firebase.database();
+
+// CANVAS
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+const input=document.getElementById("nameInput");
+
+// ESTADO
+let state="start";
+
+// JUEGO
+let pipes=[];
+let score=0;
+
+// AVION
+let bird={x:80,y:300,v:0,w:100,h:70};
+
+// NUBES
+let clouds=[];
+for(let i=0;i<4;i++){
+ clouds.push({
+  x:Math.random()*400,
+  y:Math.random()*600,
+  speed:0.3+Math.random()*0.4
+ });
+}
+
+// BOTONES
+let startBtn={x:100,y:420,w:200,h:60};
+let retryBtn={x:100,y:520,w:200,h:60};
+
+// IMAGENES
+const bg=new Image(); bg.src="fondo.jpg";
+const plane=new Image(); plane.src="avion.png";
+const cloudImg=new Image(); cloudImg.src="nube.png";
+
+// SPAWN
+setInterval(()=>{
+ if(state!=="play") return;
+ let gap=280;
+ let top=Math.random()*250+40;
+ pipes.push({x:420,top,gap,passed:false});
+},2000);
+
+// CLICK
+canvas.addEventListener("click",e=>{
+ let r=canvas.getBoundingClientRect();
+ let mx=e.clientX-r.left;
+ let my=e.clientY-r.top;
+
+ if(state==="start"){
+  if(mx>startBtn.x && mx<startBtn.x+startBtn.w && my>startBtn.y && my<startBtn.y+startBtn.h)
+   state="play";
+  return;
+ }
+
+ if(state==="play"){ bird.v=-5.5; return; }
+
+ if(state==="gameover"){
+  if(mx>retryBtn.x && mx<retryBtn.x+retryBtn.w && my>retryBtn.y && my<retryBtn.y+retryBtn.h)
+   reset();
+ }
+});
+
+// RESET
+function reset(){
+ pipes=[];
+ score=0;
+ bird.y=300;
+ bird.v=0;
+ state="start";
+ input.style.display="none";
+ input.value="";
+}
+
+// SAVE SCORE
+function saveScore(name){
+ db.ref("scores").push({name,score});
+}
+
+// LEADERBOARD
+let leaderboard=[];
+db.ref("scores").on("value",snap=>{
+ leaderboard=[];
+ snap.forEach(s=>leaderboard.push(s.val()));
+ leaderboard.sort((a,b)=>b.score-a.score);
+});
+
+// ENTER
+input.addEventListener("keydown",e=>{
+ if(e.key==="Enter" && state==="gameover"){
+  saveScore(input.value||"Anon");
+  input.style.display="none";
+ }
+});
+
+// LOOP
+function loop(){
+
+ ctx.clearRect(0,0,400,650);
+ ctx.drawImage(bg,0,0,400,650);
+
+ // NUBES
+ clouds.forEach(c=>{
+  c.x-=c.speed;
+  if(c.x<-120){c.x=450;c.y=Math.random()*600;}
+  ctx.drawImage(cloudImg,c.x,c.y,140,80);
+ });
+
+ // ---------- START ----------
+ if(state==="start"){
+
+  // TITULO CON FONDO
+  ctx.font="42px monospace";
+  let title="FLAPPY AR";
+  let w=ctx.measureText(title).width;
+
+  ctx.fillStyle="black";
+  ctx.fillRect(200-w/2-20,150,w+40,65);
+
+  ctx.strokeStyle="white";
+  ctx.lineWidth=3;
+  ctx.strokeRect(200-w/2-20,150,w+40,65);
+
+  ctx.fillStyle="#111";
+  ctx.fillText(title,200-w/2+3,195+3);
+
+  ctx.fillStyle="#00eaff";
+  ctx.fillText(title,200-w/2,195);
+
+  // BOTON START
+  ctx.fillStyle="#1e90ff";
+  ctx.fillRect(startBtn.x,startBtn.y,startBtn.w,startBtn.h);
+
+  ctx.fillStyle="white";
+  ctx.font="24px monospace";
+  ctx.fillText("JUGAR",160,460);
+
+  requestAnimationFrame(loop);
+  return;
+ }
+
+ // FISICA
+ bird.v+=0.12;
+ if(bird.v>3.5) bird.v=3.5;
+ bird.y+=bird.v;
+
+ ctx.drawImage(plane,bird.x,bird.y,bird.w,bird.h);
+
+ // TUBOS
+ pipes.forEach(p=>{
+
+  if(state==="play") p.x-=1.6;
+
+  ctx.fillStyle="#145a32";
+  ctx.fillRect(p.x+5,0,70,p.top);
+  ctx.fillRect(p.x+5,p.top+p.gap,70,650);
+
+  ctx.fillStyle="#2ecc71";
+  ctx.fillRect(p.x,0,70,p.top);
+  ctx.fillRect(p.x,p.top+p.gap,70,650);
+
+  ctx.fillStyle="rgba(255,255,255,0.25)";
+  ctx.fillRect(p.x+8,0,12,p.top);
+  ctx.fillRect(p.x+8,p.top+p.gap,12,650);
+
+  if(state==="play" &&
+   bird.x+bird.w>p.x &&
+   bird.x<p.x+70 &&
+   (bird.y<p.top || bird.y+bird.h>p.top+p.gap)
+  ){
+   state="gameover";
+   input.style.display="block";
+   input.focus();
+  }
+
+  if(state==="play" && !p.passed && p.x<bird.x){
+   p.passed=true;
+   score++;
+  }
+ });
+
+ if(bird.y>600 && state==="play"){
+  state="gameover";
+  input.style.display="block";
+  input.focus();
+ }
+
+ // SCORE
+ ctx.fillStyle="white";
+ ctx.font="40px monospace";
+ ctx.fillText(score,180,60);
+
+ // ---------- GAME OVER ----------
+ if(state==="gameover"){
+
+  ctx.fillStyle="rgba(0,0,0,0.7)";
+  ctx.fillRect(0,0,400,650);
+
+  ctx.fillStyle="red";
+  ctx.font="38px monospace";
+  ctx.fillText("FIN DEL JUEGO",50,140);
+
+  ctx.fillStyle="white";
+  ctx.font="24px monospace";
+  ctx.fillText("Hiciste "+score+" puntos",80,190);
+
+  ctx.font="18px monospace";
+  leaderboard.slice(0,5).forEach((p,i)=>{
+   let medal=i==0?"🥇":i==1?"🥈":i==2?"🥉":"";
+   ctx.fillText(medal+" "+p.name+" - "+p.score,80,240+i*30);
+  });
+
+  ctx.fillStyle="#1e90ff";
+  ctx.fillRect(retryBtn.x,retryBtn.y,retryBtn.w,retryBtn.h);
+
+  ctx.fillStyle="white";
+  ctx.font="22px monospace";
+  ctx.fillText("REINTENTAR",135,560);
+ }
+
+ requestAnimationFrame(loop);
+}
+loop();
+</script>
+
+</body>
+</html>
